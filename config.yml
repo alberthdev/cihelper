@@ -1,0 +1,210 @@
+cihelper:
+  matrix:
+    def:
+      linking:
+        - dynamic
+        - static
+      arch:
+        - x86
+        - x64
+
+    vars:
+      # Format specifier -> spec -> var -> value
+      "{arch}":
+        x86:
+          win_short_name: "win32"
+        x64:
+          win_short_name: "win64"
+      "{linking}":
+        dynamic:
+          linking_short_name: "shared"
+        static:
+          linking_short_name: "static"
+      "{linking}_{arch}":
+        dynamic_x86:
+          windeployqt_tool: "{env[QT5_BIN_DIR]}\\windeployqt.exe"
+        dynamic_x64:
+          windeployqt_tool: "{env[QT5_BIN_DIR]}\\windeployqt.exe"
+  
+  ci_setup:
+    # How is it specified within def?
+    spec: "{linking}_{arch}"
+    def:
+      global_extract:
+        type: 7z
+        to: C:\\
+        path: "{out[{linking}_{arch}_dl_1]}"
+      static_x86:
+        - download:
+            type: bintray
+            path: https://oss.jfrog.org/artifactory/oss-snapshot-local/org/github/CE-Programming/CEmu/appveyor-qt/Qt5.15.0_Rel_Static_Win32_DevDeploy.7z.001
+            id: "{linking}_{arch}_dl_1"
+        - download:
+            type: bintray
+            path: https://oss.jfrog.org/artifactory/oss-snapshot-local/org/github/CE-Programming/CEmu/appveyor-qt/Qt5.15.0_Rel_Static_Win32_DevDeploy.7z.002
+            id: "{linking}_{arch}_dl_2"
+        - other_def:
+            run: global_extract
+      static_x64:
+        - download:
+            type: bintray
+            path: https://oss.jfrog.org/artifactory/oss-snapshot-local/org/github/CE-Programming/CEmu/appveyor-qt/Qt5.15.0_Rel_Static_Win64_DevDeploy.7z.001
+            id: "{linking}_{arch}_dl_1"
+        - download:
+            type: bintray
+            path: https://oss.jfrog.org/artifactory/oss-snapshot-local/org/github/CE-Programming/CEmu/appveyor-qt/Qt5.15.0_Rel_Static_Win64_DevDeploy.7z.002
+            id: "{linking}_{arch}_dl_2"
+        - other_def:
+            run: global_extract
+
+  artifacts:
+    # How is it specified within def?
+    spec: "{linking}_{arch}_{build_type}"
+
+    matrix:
+      def:
+        build_type:
+          - release
+          - shared
+      vars:
+        # Format specifier -> spec -> var -> value
+        "{build_type}":
+          release:
+            build_type_short_name: "release"
+          debug:
+            build_type_short_name: "debug"
+
+    vars:
+      bintray_maven_group_path: /org/github/CE-Programming/CEmu
+      timestamp:
+        datetime:
+          args:
+            format: "%Y%m%d_%H%M%S"
+            live: True
+      timestamp_yymm:
+        datetime:
+          args:
+            format: "%Y%m"
+            live: True
+      timestamp_yymmdd:
+        datetime:
+          args:
+            format: "%Y%m"
+            live: True
+      snapshot_name: "cemu-{timestamp}-git-{git[short_rev]}"
+      snapshot_base_filename: "{snapshot_name}-{win_short_name}-{build_type_short_name}-{linking_short_name}"
+
+    def:
+      global_archive:
+        - archive:
+            name: "{snapshot_base_filename}.zip"
+            type: zip
+      
+      global_upload:
+        - upload:
+            bintray:
+              path: "{bintray_maven_group_path}/git/{timestamp_yymm}/{timestamp_yymmdd}/{snapshot_name}/{archive[name]}"
+              username: "{env[BINTRAY_API_USERNAME]}"
+              password: "{env[BINTRAY_API_KEY]}"
+      
+      dynamic_x86_debug:
+        - collect:
+            - VCRedist: "C:\Program Files (x86)\\Microsoft Visual Studio 14.0\\VC\\redist\\debug_nonredist\\x86\\Microsoft.VC140.DebugCRT\\*.dll"
+            - UCRT: "C:\\Program Files (x86)\\Windows Kits\\10\\redist\\ucrt\\DLLs\\x86\\*.dll"
+            - UCRT Debug: "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\x86\\ucrt\\*.dll"
+            - vcpkg provided DLLs: "{runtime[pwd]}\\build_32\\debug\\*.dll"
+            - CEmu: "{runtime[pwd]}\\build_32\\debug\\CEmu.exe"
+            - Qt:
+                qt:
+                  args:
+                    windeployqt_tool: "{windeployqt_tool}"
+                    exe_file: "{runtime[pwd]}\\build_32\\debug\\CEmu.exe"
+                    with_qml: False
+        - other_def:
+            run: global_archive
+        - other_def:
+            run: global_upload
+      
+      dynamic_x64_debug:
+        - collect:
+            - VCRedist: "C:\Program Files (x86)\\Microsoft Visual Studio 14.0\\VC\\redist\\debug_nonredist\\x64\\Microsoft.VC140.DebugCRT\\*.dll"
+            - UCRT: "C:\\Program Files (x86)\\Windows Kits\\10\\redist\\ucrt\\DLLs\\x64\\*.dll"
+            - UCRT Debug: "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\x64\\ucrt\\*.dll"
+            - vcpkg provided DLLs: "{runtime[pwd]}\\build_64\\debug\\*.dll"
+            - CEmu: "{runtime[pwd]}\\build_64\\debug\\CEmu.exe"
+            - Qt:
+                qt:
+                  args:
+                    windeployqt_tool: "{windeployqt_tool}"
+                    exe_file: "{runtime[pwd]}\\build_64\\debug\\CEmu.exe"
+                    with_qml: False
+        - other_def:
+            run: global_archive
+        - other_def:
+            run: global_upload
+
+      dynamic_x86_release:
+        - collect:
+            - VCRedist: "C:\Program Files (x86)\\Microsoft Visual Studio 14.0\\VC\\redist\\x86\\Microsoft.VC140.CRT\\*.dll"
+            - UCRT: "C:\\Program Files (x86)\\Windows Kits\\10\\redist\\ucrt\\DLLs\\x86\\*.dll"
+            - vcpkg provided DLLs: "{runtime[pwd]}\\build_32\\release\\*.dll"
+            - CEmu: "{runtime[pwd]}\\build_32\\release\\CEmu.exe"
+            - Qt:
+                qt:
+                  args:
+                    windeployqt_tool: "{windeployqt_tool}"
+                    exe_file: "{runtime[pwd]}\\build_32\\release\\CEmu.exe"
+                    with_qml: False
+        - other_def:
+            run: global_archive
+        - other_def:
+            run: global_upload
+      
+      dynamic_x64_release:
+        - collect:
+            - VCRedist: "C:\Program Files (x86)\\Microsoft Visual Studio 14.0\\VC\\redist\\x64\\Microsoft.VC140.CRT\\*.dll"
+            - UCRT: "C:\\Program Files (x86)\\Windows Kits\\10\\redist\\ucrt\\DLLs\\x64\\*.dll"
+            - vcpkg provided DLLs: "{runtime[pwd]}\\build_64\\release\\*.dll"
+            - CEmu: "{runtime[pwd]}\\build_64\\release\\CEmu.exe"
+            - Qt:
+                qt:
+                  args:
+                    windeployqt_tool: "{windeployqt_tool}"
+                    exe_file: "{runtime[pwd]}\\build_64\\release\\CEmu.exe"
+                    with_qml: False
+        - other_def:
+            run: global_archive
+        - other_def:
+            run: global_upload
+
+      static_x86_debug:
+        - collect:
+            - CEmu: "{runtime[pwd]}\\build_static_32\\debug\\CEmu.exe"
+        - other_def:
+            run: global_archive
+        - other_def:
+            run: global_upload
+      
+      static_x64_debug:
+        - collect:
+            - CEmu: "{runtime[pwd]}\\build_static_64\\debug\\CEmu.exe"
+        - other_def:
+            run: global_archive
+        - other_def:
+            run: global_upload
+
+      static_x86_release:
+        - collect:
+            - CEmu: "{runtime[pwd]}\\build_static_32\\release\\CEmu.exe"
+        - other_def:
+            run: global_archive
+        - other_def:
+            run: global_upload
+
+      static_x64_release:
+        - collect:
+            - CEmu: "{runtime[pwd]}\\build_static_64\\release\\CEmu.exe"
+        - other_def:
+            run: global_archive
+        - other_def:
+            run: global_upload
